@@ -19,49 +19,41 @@ jobs:
             variant: cpu
             cuda_arches: ""
             archive_ext: zip
-            shell: pwsh
           - os: windows-latest
             platform: win
             variant: turing
             cuda_arches: "75"
             archive_ext: zip
-            shell: pwsh
           - os: windows-latest
             platform: win
             variant: ampere
             cuda_arches: "86;89"
             archive_ext: zip
-            shell: pwsh
           - os: windows-latest
             platform: win
             variant: blackwell
             cuda_arches: "100;120"
             archive_ext: zip
-            shell: pwsh
           - os: ubuntu-22.04
             platform: linux
             variant: cpu
             cuda_arches: ""
             archive_ext: tar.gz
-            shell: bash
           - os: ubuntu-22.04
             platform: linux
             variant: turing
             cuda_arches: "75"
             archive_ext: tar.gz
-            shell: bash
           - os: ubuntu-22.04
             platform: linux
             variant: ampere
             cuda_arches: "86;89"
             archive_ext: tar.gz
-            shell: bash
           - os: ubuntu-22.04
             platform: linux
             variant: blackwell
             cuda_arches: "100;120"
             archive_ext: tar.gz
-            shell: bash
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -113,8 +105,14 @@ jobs:
           fi
           cmake -S . -B build -DLLAMA_BUILD_SERVER=ON -DBUILD_SHARED_LIBS=OFF $extra
 
-      - name: Build
-        shell: ${{ matrix.shell }}
+      - name: Build Windows
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: cmake --build build --config Release --target llama-server
+
+      - name: Build Linux
+        if: matrix.platform == 'linux'
+        shell: bash
         run: cmake --build build --config Release --target llama-server
 
       - name: Package Windows
