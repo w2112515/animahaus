@@ -79,6 +79,7 @@ jobs:
         if: matrix.platform == 'win'
         shell: pwsh
         run: |
+          $base = "-DLLAMA_BUILD_SERVER=ON -DBUILD_SHARED_LIBS=OFF"
           $extra = ""
           if ("${{ matrix.variant }}" -ne "cpu") {
             $extra = "-DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=${{ matrix.cuda_arches }}"
@@ -86,14 +87,16 @@ jobs:
               $extra = "$extra -DGGML_CUDA_F16=ON"
             }
           } else {
-            $extra = "-DGGML_CPU_ALL_VARIANTS=ON"
+            $base = "-DLLAMA_BUILD_SERVER=ON -DBUILD_SHARED_LIBS=ON"
+            $extra = "-DGGML_CPU_ALL_VARIANTS=ON -DGGML_BACKEND_DL=ON"
           }
-          cmake -S . -B build -DLLAMA_BUILD_SERVER=ON -DBUILD_SHARED_LIBS=OFF $extra
+          cmake -S . -B build $base $extra
 
       - name: Configure Linux
         if: matrix.platform == 'linux'
         shell: bash
         run: |
+          base="-DLLAMA_BUILD_SERVER=ON -DBUILD_SHARED_LIBS=OFF"
           extra=""
           if [ "${{ matrix.variant }}" != "cpu" ]; then
             extra="-DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=${{ matrix.cuda_arches }}"
@@ -101,9 +104,10 @@ jobs:
               extra="$extra -DGGML_CUDA_F16=ON"
             fi
           else
-            extra="-DGGML_CPU_ALL_VARIANTS=ON"
+            base="-DLLAMA_BUILD_SERVER=ON -DBUILD_SHARED_LIBS=ON"
+            extra="-DGGML_CPU_ALL_VARIANTS=ON -DGGML_BACKEND_DL=ON"
           fi
-          cmake -S . -B build -DLLAMA_BUILD_SERVER=ON -DBUILD_SHARED_LIBS=OFF $extra
+          cmake -S . -B build $base $extra
 
       - name: Build Windows
         if: matrix.platform == 'win'
