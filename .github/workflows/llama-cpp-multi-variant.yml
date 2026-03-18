@@ -79,18 +79,27 @@ jobs:
         if: matrix.platform == 'win'
         shell: pwsh
         run: |
-          $base = "-DLLAMA_BUILD_SERVER=ON -DBUILD_SHARED_LIBS=OFF"
-          $extra = ""
+          $cmakeArgs = @(
+            "-DLLAMA_BUILD_SERVER=ON",
+            "-DBUILD_SHARED_LIBS=OFF"
+          )
           if ("${{ matrix.variant }}" -ne "cpu") {
-            $extra = "-DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=${{ matrix.cuda_arches }}"
+            $cmakeArgs += @(
+              "-DGGML_CUDA=ON",
+              "-DCMAKE_CUDA_ARCHITECTURES=${{ matrix.cuda_arches }}"
+            )
             if ("${{ matrix.variant }}" -eq "ampere" -or "${{ matrix.variant }}" -eq "blackwell") {
-              $extra = "$extra -DGGML_CUDA_F16=ON"
+              $cmakeArgs += "-DGGML_CUDA_F16=ON"
             }
           } else {
-            $base = "-DLLAMA_BUILD_SERVER=ON -DBUILD_SHARED_LIBS=ON"
-            $extra = "-DGGML_CPU_ALL_VARIANTS=ON -DGGML_BACKEND_DL=ON"
+            $cmakeArgs = @(
+              "-DLLAMA_BUILD_SERVER=ON",
+              "-DBUILD_SHARED_LIBS=ON",
+              "-DGGML_CPU_ALL_VARIANTS=ON",
+              "-DGGML_BACKEND_DL=ON"
+            )
           }
-          cmake -S . -B build $base $extra
+          cmake -S . -B build @cmakeArgs
 
       - name: Configure Linux
         if: matrix.platform == 'linux'
