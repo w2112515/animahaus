@@ -64,30 +64,51 @@ jobs:
             variant: blackwell
             cuda_arches: "100;120"
             archive_ext: tar.gz
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.target_profile == 'full' || (inputs.target_profile == 'representative' && matrix.platform == 'win' && (matrix.variant == 'cpu' || matrix.variant == 'ampere')) || (inputs.target_profile == 'ampere-only' && matrix.platform == 'win' && matrix.variant == 'ampere') }}
     runs-on: ${{ matrix.os }}
 
     steps:
+      - name: Select build scope
+        id: scope
+        shell: pwsh
+        run: |
+          $runEntry = $true
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            switch ("${{ inputs.target_profile }}") {
+              "representative" {
+                $runEntry = "${{ matrix.platform }}" -eq "win" -and ("${{ matrix.variant }}" -eq "cpu" -or "${{ matrix.variant }}" -eq "ampere")
+              }
+              "ampere-only" {
+                $runEntry = "${{ matrix.platform }}" -eq "win" -and "${{ matrix.variant }}" -eq "ampere"
+              }
+              default {
+                $runEntry = $true
+              }
+            }
+          }
+          "run_entry=$($runEntry.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+
       - uses: actions/checkout@v4
+        if: steps.scope.outputs.run_entry == 'true'
         with:
           repository: ggml-org/llama.cpp
           ref: b8198
 
       - name: Set up CMake
+        if: steps.scope.outputs.run_entry == 'true'
         uses: lukka/get-cmake@latest
 
       - name: Set up MSVC
-        if: matrix.platform == 'win'
+        if: steps.scope.outputs.run_entry == 'true' && matrix.platform == 'win'
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Set up CUDA
-        if: matrix.variant != 'cpu'
+        if: steps.scope.outputs.run_entry == 'true' && matrix.variant != 'cpu'
         uses: Jimver/cuda-toolkit@v0.2.19
         with:
           cuda: "12.4.1"
 
       - name: Configure Windows
-        if: matrix.platform == 'win'
+        if: steps.scope.outputs.run_entry == 'true' && matrix.platform == 'win'
         shell: pwsh
         run: |
           $cmakeArgs = @(
@@ -113,7 +134,7 @@ jobs:
           cmake -S . -B build @cmakeArgs
 
       - name: Configure Linux
-        if: matrix.platform == 'linux'
+        if: steps.scope.outputs.run_entry == 'true' && matrix.platform == 'linux'
         shell: bash
         run: |
           base="-DLLAMA_BUILD_SERVER=ON -DBUILD_SHARED_LIBS=OFF"
@@ -130,17 +151,17 @@ jobs:
           cmake -S . -B build $base $extra
 
       - name: Build Windows
-        if: matrix.platform == 'win'
+        if: steps.scope.outputs.run_entry == 'true' && matrix.platform == 'win'
         shell: pwsh
         run: cmake --build build --config Release --target llama-server --parallel
 
       - name: Build Linux
-        if: matrix.platform == 'linux'
+        if: steps.scope.outputs.run_entry == 'true' && matrix.platform == 'linux'
         shell: bash
         run: cmake --build build --config Release --target llama-server --parallel
 
       - name: Package Windows
-        if: matrix.platform == 'win'
+        if: steps.scope.outputs.run_entry == 'true' && matrix.platform == 'win'
         shell: pwsh
         run: |
           $asset = "llama-b8198-bin-${{ matrix.platform }}-${{ matrix.variant }}-x64.zip"
@@ -152,7 +173,7 @@ jobs:
           Compress-Archive -Path out\* -DestinationPath $asset -Force
 
       - name: Package Linux
-        if: matrix.platform == 'linux'
+        if: steps.scope.outputs.run_entry == 'true' && matrix.platform == 'linux'
         shell: bash
         run: |
           asset="llama-b8198-bin-${{ matrix.platform }}-${{ matrix.variant }}-x64.tar.gz"
@@ -162,13 +183,14 @@ jobs:
           tar -czf "$asset" -C out .
 
       - name: Upload artifact
+        if: steps.scope.outputs.run_entry == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: llama-${{ matrix.platform }}-${{ matrix.variant }}
           path: llama-b8198-bin-${{ matrix.platform }}-${{ matrix.variant }}-x64.${{ matrix.archive_ext }}
 
       - name: Publish release assets
-        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+        if: steps.scope.outputs.run_entry == 'true' && (github.event_name == 'release' || github.event_name == 'workflow_dispatch')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: llama-b8198-ah1
