@@ -1,0 +1,153 @@
+name: llama-cpp-multi-variant
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            variant: cpu
+            cuda_arches: ""
+            archive_ext: zip
+            shell: pwsh
+          - os: windows-latest
+            platform: win
+            variant: turing
+            cuda_arches: "75"
+            archive_ext: zip
+            shell: pwsh
+          - os: windows-latest
+            platform: win
+            variant: ampere
+            cuda_arches: "86;89"
+            archive_ext: zip
+            shell: pwsh
+          - os: windows-latest
+            platform: win
+            variant: blackwell
+            cuda_arches: "100;120"
+            archive_ext: zip
+            shell: pwsh
+          - os: ubuntu-22.04
+            platform: linux
+            variant: cpu
+            cuda_arches: ""
+            archive_ext: tar.gz
+            shell: bash
+          - os: ubuntu-22.04
+            platform: linux
+            variant: turing
+            cuda_arches: "75"
+            archive_ext: tar.gz
+            shell: bash
+          - os: ubuntu-22.04
+            platform: linux
+            variant: ampere
+            cuda_arches: "86;89"
+            archive_ext: tar.gz
+            shell: bash
+          - os: ubuntu-22.04
+            platform: linux
+            variant: blackwell
+            cuda_arches: "100;120"
+            archive_ext: tar.gz
+            shell: bash
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ggml-org/llama.cpp
+          ref: b8198
+
+      - name: Set up CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Set up MSVC
+        if: matrix.platform == 'win'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Set up CUDA
+        if: matrix.variant != 'cpu'
+        uses: Jimver/cuda-toolkit@v0.2.19
+        with:
+          cuda: "12.4.1"
+
+      - name: Configure Windows
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: |
+          $extra = ""
+          if ("${{ matrix.variant }}" -ne "cpu") {
+            $extra = "-DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=${{ matrix.cuda_arches }}"
+            if ("${{ matrix.variant }}" -eq "ampere" -or "${{ matrix.variant }}" -eq "blackwell") {
+              $extra = "$extra -DGGML_CUDA_F16=ON"
+            }
+          } else {
+            $extra = "-DGGML_CPU_ALL_VARIANTS=ON"
+          }
+          cmake -S . -B build -DLLAMA_BUILD_SERVER=ON -DBUILD_SHARED_LIBS=OFF $extra
+
+      - name: Configure Linux
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          extra=""
+          if [ "${{ matrix.variant }}" != "cpu" ]; then
+            extra="-DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=${{ matrix.cuda_arches }}"
+            if [ "${{ matrix.variant }}" = "ampere" ] || [ "${{ matrix.variant }}" = "blackwell" ]; then
+              extra="$extra -DGGML_CUDA_F16=ON"
+            fi
+          else
+            extra="-DGGML_CPU_ALL_VARIANTS=ON"
+          fi
+          cmake -S . -B build -DLLAMA_BUILD_SERVER=ON -DBUILD_SHARED_LIBS=OFF $extra
+
+      - name: Build
+        shell: ${{ matrix.shell }}
+        run: cmake --build build --config Release --target llama-server
+
+      - name: Package Windows
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: |
+          $asset = "llama-b8198-bin-${{ matrix.platform }}-${{ matrix.variant }}-x64.zip"
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          Copy-Item build\bin\Release\llama-server.exe out\
+          if (Test-Path build\bin\Release\*.dll) {
+            Copy-Item build\bin\Release\*.dll out\
+          }
+          Compress-Archive -Path out\* -DestinationPath $asset -Force
+
+      - name: Package Linux
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          asset="llama-b8198-bin-${{ matrix.platform }}-${{ matrix.variant }}-x64.tar.gz"
+          mkdir -p out
+          cp build/bin/llama-server out/
+          find build -maxdepth 2 -type f \( -name "*.so" -o -name "*.so.*" \) -exec cp {} out/ \;
+          tar -czf "$asset" -C out .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-${{ matrix.platform }}-${{ matrix.variant }}
+          path: llama-b8198-bin-${{ matrix.platform }}-${{ matrix.variant }}-x64.${{ matrix.archive_ext }}
+
+      - name: Publish release assets
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: llama-b8198-ah1
+          files: llama-b8198-bin-${{ matrix.platform }}-${{ matrix.variant }}-x64.${{ matrix.archive_ext }}
