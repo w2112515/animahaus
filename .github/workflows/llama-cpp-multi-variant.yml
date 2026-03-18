@@ -27,41 +27,49 @@ jobs:
           - os: windows-latest
             platform: win
             variant: cpu
+            asset_variant: cpu
             cuda_arches: ""
             archive_ext: zip
           - os: windows-latest
             platform: win
             variant: turing
+            asset_variant: cuda-turing
             cuda_arches: "75"
             archive_ext: zip
           - os: windows-latest
             platform: win
             variant: ampere
+            asset_variant: cuda-ampere
             cuda_arches: "86;89"
             archive_ext: zip
           - os: windows-latest
             platform: win
             variant: blackwell
+            asset_variant: cuda-blackwell
             cuda_arches: "100;120"
             archive_ext: zip
           - os: ubuntu-22.04
             platform: linux
             variant: cpu
+            asset_variant: cpu
             cuda_arches: ""
             archive_ext: tar.gz
           - os: ubuntu-22.04
             platform: linux
             variant: turing
+            asset_variant: cuda-turing
             cuda_arches: "75"
             archive_ext: tar.gz
           - os: ubuntu-22.04
             platform: linux
             variant: ampere
+            asset_variant: cuda-ampere
             cuda_arches: "86;89"
             archive_ext: tar.gz
           - os: ubuntu-22.04
             platform: linux
             variant: blackwell
+            asset_variant: cuda-blackwell
             cuda_arches: "100;120"
             archive_ext: tar.gz
     runs-on: ${{ matrix.os }}
@@ -164,7 +172,7 @@ jobs:
         if: steps.scope.outputs.run_entry == 'true' && matrix.platform == 'win'
         shell: pwsh
         run: |
-          $asset = "llama-b8198-bin-${{ matrix.platform }}-${{ matrix.variant }}-x64.zip"
+          $asset = "llama-b8198-bin-${{ matrix.platform }}-${{ matrix.asset_variant }}-x64.zip"
           New-Item -ItemType Directory -Force -Path out | Out-Null
           Copy-Item build\bin\Release\llama-server.exe out\
           if (Test-Path build\bin\Release\*.dll) {
@@ -176,7 +184,7 @@ jobs:
         if: steps.scope.outputs.run_entry == 'true' && matrix.platform == 'linux'
         shell: bash
         run: |
-          asset="llama-b8198-bin-${{ matrix.platform }}-${{ matrix.variant }}-x64.tar.gz"
+          asset="llama-b8198-bin-${{ matrix.platform }}-${{ matrix.asset_variant }}-x64.tar.gz"
           mkdir -p out
           cp build/bin/llama-server out/
           find build -maxdepth 2 -type f \( -name "*.so" -o -name "*.so.*" \) -exec cp {} out/ \;
@@ -186,12 +194,12 @@ jobs:
         if: steps.scope.outputs.run_entry == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: llama-${{ matrix.platform }}-${{ matrix.variant }}
-          path: llama-b8198-bin-${{ matrix.platform }}-${{ matrix.variant }}-x64.${{ matrix.archive_ext }}
+          name: llama-${{ matrix.platform }}-${{ matrix.asset_variant }}
+          path: llama-b8198-bin-${{ matrix.platform }}-${{ matrix.asset_variant }}-x64.${{ matrix.archive_ext }}
 
       - name: Publish release assets
         if: steps.scope.outputs.run_entry == 'true' && (github.event_name == 'release' || github.event_name == 'workflow_dispatch')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: llama-b8198-ah1
-          files: llama-b8198-bin-${{ matrix.platform }}-${{ matrix.variant }}-x64.${{ matrix.archive_ext }}
+          files: llama-b8198-bin-${{ matrix.platform }}-${{ matrix.asset_variant }}-x64.${{ matrix.archive_ext }}
