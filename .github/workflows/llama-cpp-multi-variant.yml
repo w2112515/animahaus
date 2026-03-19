@@ -161,7 +161,13 @@ jobs:
       - name: Build Windows
         if: steps.scope.outputs.run_entry == 'true' && matrix.platform == 'win'
         shell: pwsh
-        run: cmake --build build --config Release --target llama-server --parallel
+        run: |
+          $targets = @(
+            "llama-server",
+            "llama-bench",
+            "llama-cli"
+          )
+          cmake --build build --config Release --target @targets --parallel
 
       - name: Build Linux
         if: steps.scope.outputs.run_entry == 'true' && matrix.platform == 'linux'
@@ -173,10 +179,39 @@ jobs:
         shell: pwsh
         run: |
           $asset = "llama-b8198-bin-${{ matrix.platform }}-${{ matrix.asset_variant }}-x64.zip"
+          $releaseBin = "build\bin\Release"
+          $requiredExecutables = @(
+            "llama-server.exe",
+            "llama-bench.exe",
+            "llama-cli.exe"
+          )
+          $opensslRuntimeDlls = @(
+            "libssl-3-x64.dll",
+            "libcrypto-3-x64.dll"
+          )
           New-Item -ItemType Directory -Force -Path out | Out-Null
-          Copy-Item build\bin\Release\llama-server.exe out\
-          if (Test-Path build\bin\Release\*.dll) {
-            Copy-Item build\bin\Release\*.dll out\
+
+          foreach ($exe in $requiredExecutables) {
+            $source = Join-Path $releaseBin $exe
+            if (!(Test-Path $source)) {
+              throw "Missing expected Windows package executable: $exe"
+            }
+            Copy-Item $source out\
+          }
+
+          if (Test-Path "$releaseBin\*.dll") {
+            Copy-Item "$releaseBin\*.dll" out\
+          }
+
+          $gitCommand = Get-Command git -ErrorAction Stop
+          $gitCmdDir = Split-Path $gitCommand.Source
+          $mingwBin = [System.IO.Path]::GetFullPath((Join-Path $gitCmdDir "..\mingw64\bin"))
+          foreach ($dll in $opensslRuntimeDlls) {
+            $source = Join-Path $mingwBin $dll
+            if (!(Test-Path $source)) {
+              throw "Missing expected OpenSSL runtime dependency: $dll"
+            }
+            Copy-Item $source out\
           }
           Compress-Archive -Path out\* -DestinationPath $asset -Force
 
